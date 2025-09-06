@@ -13,7 +13,7 @@ STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "seen.json"
 
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")  # 처음에는 알림 안 보내고 상태만 기록하고 싶을 때
+INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")  # 처음엔 상태만 기록하고 알림은 안 보낼 때
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -50,44 +50,59 @@ def fetch(url, retries=3, backoff=2):
             time.sleep(backoff * (i+1))
     raise last_err
 
-def textnorm(s):
+def textnorm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 def safe_text(s: str) -> str:
-    # 제어문자/제로폭문자 제거
+    # 제어문자/제로폭 문자 제거
     return re.sub(r"[\u200b-\u200f\u202a-\u202e]", "", s or "").strip()
 
-def discord_post(title, url, site_name, date_text=None):
+def discord_post(title, url, site_name, date_text=None, max_retries=5):
+    """Discord 웹훅 전송: 429(rate limit) 대응 재시도 & 전송 간 딜레이."""
     if not DISCORD_WEBHOOK:
         print("WARN: DISCORD_WEBHOOK not set; skipping post", file=sys.stderr)
         return
-    title = safe_text(title)
-    site_name = safe_text(site_name)
-    date_text = safe_text(date_text) if date_text else None
-    content = f"**[{site_name}] 새 공지**\n{title}"
+    content = f"**[{safe_text(site_name)}] 새 공지**\n{safe_text(title)}"
     if url:
         content += f"\n{url}"
     if date_text:
-        content += f"\n게시일: {date_text}"
-    resp = SESSION.post(DISCORD_WEBHOOK, json={"content": content}, timeout=TIMEOUT)
-    if resp.status_code >= 300:
+        content += f"\n게시일: {safe_text(date_text)}"
+
+    payload = {"content": content}
+
+    for attempt in range(max_retries):
+        resp = SESSION.post(DISCORD_WEBHOOK, json=payload, timeout=TIMEOUT)
+        if resp.status_code == 204 or resp.status_code < 300:
+            # 성공 후 살짝 쉬어서 속도 제한 여유 확보
+            time.sleep(0.7)
+            return
+        if resp.status_code == 429:
+            # 디스코드가 알려준 대기시간만큼 기다린 뒤 재시도
+            try:
+                data = resp.json()
+                wait = float(data.get("retry_after", 1.0))
+            except Exception:
+                wait = 1.0
+            time.sleep(wait + 0.2)
+            continue
         print(f"Discord webhook failed: {resp.status_code} {resp.text}", file=sys.stderr)
+        time.sleep(0.8)
+    print("ERROR: Discord post failed after retries.", file=sys.stderr)
 
 def should_skip_row(row, site):
-    # 고정공지/공지 스킵 규칙
+    # 고정공지 스킵 규칙 (CSS 셀렉터/contains 지원)
     skip_rules = site.get("skip_if_selector", [])
-    if not skip_rules:
-        return False
-    for sel in skip_rules:
-        if ":contains(" in sel:
-            base_sel, text = sel.split(":contains(", 1)
-            text = text.rstrip(")").strip("'\"")
-            for el in row.select(base_sel):
-                if text in (el.get_text() or ""):
+    if skip_rules:
+        for sel in skip_rules:
+            if ":contains(" in sel:
+                base_sel, text = sel.split(":contains(", 1)
+                text = text.rstrip(")").strip("'\"")
+                for el in row.select(base_sel):
+                    if text in (el.get_text() or ""):
+                        return True
+            else:
+                if row.select_one(sel):
                     return True
-        else:
-            if row.select_one(sel):
-                return True
     return False
 
 def extract_date(row, site):
@@ -96,15 +111,14 @@ def extract_date(row, site):
     if not sel:
         return None
     dlist = row.select(sel)
-    # KNUSEMI: span.hit 여러 개 중 "작성일" 포함된 것만
+    # KNUSEMI: span.hit 여러 개 중 '작성일' 포함된 것만
     for d in dlist:
         txt = textnorm(d.get_text())
         if "작성일" in txt:
             date_text = txt.replace("작성일", "").replace(":", "").strip()
             break
-    # SEE는 td.date 하나라면 위 루프에서 그대로 date_text가 채워짐
+    # SEE 등 일반 케이스: 첫 요소 텍스트
     if not date_text and dlist:
-        # fallback: 첫 번째 요소 텍스트
         date_text = textnorm(dlist[0].get_text())
     return date_text
 
@@ -126,20 +140,18 @@ def parse_and_notify(site, state):
         if should_skip_row(row, site):
             continue
 
-        a = row.select_one(site.get("title_selector", "a"))
-        if not a:
+        title_el = row.select_one(site.get("title_selector", "a"))
+        if not title_el:
             continue
-        title = textnorm(a.get_text())
+        title = textnorm(title_el.get_text())
 
-        # 링크
-        href_el = row.select_one(site.get("link_selector", "a"))
-        href = href_el.get("href") if href_el else ""
+        link_el = row.select_one(site.get("link_selector", "a"))
+        href = link_el.get("href") if link_el else ""
         link = urljoin(site.get("base_url", site["url"]), href) if href else None
 
-        # 날짜
         date_text = extract_date(row, site)
 
-        # 중복키
+        # 중복키: 링크가 있으면 링크로, 없으면 제목|날짜
         key = link if (site.get("id_strategy", "link") == "link" and link) else f"{title}|{date_text or ''}"
         if key in seen:
             continue
@@ -155,7 +167,6 @@ def parse_and_notify(site, state):
     # 상태 업데이트
     keep = site.get("max_items", 20)
     state[site["name"]] = (list(seen) + new_ids)[-keep:]
-
     return new_count
 
 def main():
