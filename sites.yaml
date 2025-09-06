@@ -1,0 +1,24 @@
+sites:
+  # 1) SEE 공지
+  - name: "KNU 전자공학부 공지(SEE)"
+    url: "https://see.knu.ac.kr/content/board/notice.html"
+    list_selector: "div.board_list tbody tr"
+    title_selector: "td.subject a"
+    link_selector: "td.subject a"
+    date_selector: "td.date"
+    base_url: "https://see.knu.ac.kr"
+    id_strategy: "link"
+    max_items: 30
+    skip_if_selector: ["span.notice", "tr.notice", "td.category:contains('공지')"]
+
+  # 2) KNUSEMI 공지
+  - name: "KNU 반도체특성화 공지(KNUSEMI)"
+    url: "https://knusemi.knu.ac.kr/content/community/notice.html"
+    list_selector: "div.board_list a"
+    title_selector: "p.subject"
+    link_selector: "a"
+    date_selector: "span.hit"      # 조회수/작성일 둘 다 있으니 코드에서 '작성일'만 골라냄
+    base_url: "https://knusemi.knu.ac.kr"
+    id_strategy: "link"
+    max_items: 30
+    skip_if_selector: ["span.notice"]
