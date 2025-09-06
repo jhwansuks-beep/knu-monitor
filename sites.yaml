@@ -3,13 +3,13 @@ sites:
   - name: "KNU 전자공학부 공지(SEE)"
     url: "https://see.knu.ac.kr/content/board/notice.html"
     list_selector: "table.board_list tbody tr"
-    title_selector: "td.left a"
-    link_selector: "td.left a"
-    date_selector: "td:nth-of-type(4)"   # 번호-제목-작성자-날짜-조회수 → 4번째 열이 날짜
+    title_selector: "td.left + td"       # 제목은 td.left 다음 칸
+    link_selector: "td.left a"           # 링크는 td.left a의 href
+    date_selector: "td:nth-of-type(4)"   # 4번째 칸이 날짜
     base_url: "https://see.knu.ac.kr"
     id_strategy: "link"
     max_items: 30
-    skip_if_selector: ["span.notice"]    # 상단 고정공지 무시
+    skip_if_selector: ["span.notice"]    # 상단 고정공지(공지) 제외
 
   # 2) KNU 반도체특성화 공지(KNUSEMI)
   - name: "KNU 반도체특성화 공지(KNUSEMI)"
@@ -21,4 +21,4 @@ sites:
     base_url: "https://knusemi.knu.ac.kr"
     id_strategy: "link"
     max_items: 30
-    skip_if_selector: ["span.notice"]    # 상단 고정공지 무시
+    skip_if_selector: ["span.notice"]    # 상단 고정공지 제외
