@@ -2,28 +2,22 @@ sites:
   # 1) KNU 전자공학부 공지(SEE)
   - name: "KNU 전자공학부 공지(SEE)"
     url: "https://see.knu.ac.kr/content/board/notice.html"
-    # 페이지마다 div/table 래퍼가 다를 수 있어 둘 다 잡게 콤마(,) 셀렉터 사용
     list_selector: "div.board_list tbody tr, table.board_list tbody tr"
-    # 제목은 td.left 바로 다음 칸의 텍스트
-    title_selector: "td.left + td"
-    # 상세 링크는 td.left a 의 href
+    title_selector: "td.left a"          # ← 제목은 여기!
     link_selector: "td.left a"
-    # 번호-제목-작성자-날짜-조회수 → 4번째 칸이 날짜
-    date_selector: "td:nth-of-type(4)"
+    date_selector: "td:nth-of-type(4)"   # 번호-제목-작성자-날짜-조회수 → 4번째가 날짜
     base_url: "https://see.knu.ac.kr"
     id_strategy: "link"
     max_items: 30
-    # 상단 고정공지 제외
-    skip_if_selector: ["span.notice"]
+    skip_if_selector: ["span.notice"]    # 상단고정 제외
 
   # 2) KNU 반도체특성화 공지(KNUSEMI)
   - name: "KNU 반도체특성화 공지(KNUSEMI)"
     url: "https://knusemi.knu.ac.kr/content/community/notice.html"
-    list_selector: "div.board_list a"
+    list_selector: "div.board_list a"    # 행 자체가 <a>
     title_selector: "p.subject"
-    link_selector: "a"
-    # 조회수/작성일 둘 다 span.hit라 코드에서 '작성일'만 골라냄
-    date_selector: "span.hit"
+    link_selector: "a"                   # 행 내부 a (없으면 아래 코드에서 fallback)
+    date_selector: "span.hit"            # 코드에서 '작성일'만 골라냄
     base_url: "https://knusemi.knu.ac.kr"
     id_strategy: "link"
     max_items: 30
