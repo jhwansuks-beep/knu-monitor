@@ -13,7 +13,7 @@ STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "seen.json"
 
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")  # 처음엔 상태만 기록하고 알림은 안 보낼 때
+INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")  # 처음엔 상태만 기록
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -73,11 +73,9 @@ def discord_post(title, url, site_name, date_text=None, max_retries=5):
     for attempt in range(max_retries):
         resp = SESSION.post(DISCORD_WEBHOOK, json=payload, timeout=TIMEOUT)
         if resp.status_code == 204 or resp.status_code < 300:
-            # 성공 후 살짝 쉬어서 속도 제한 여유 확보
-            time.sleep(0.7)
+            time.sleep(0.7)  # 속도 제한 여유
             return
         if resp.status_code == 429:
-            # 디스코드가 알려준 대기시간만큼 기다린 뒤 재시도
             try:
                 data = resp.json()
                 wait = float(data.get("retry_after", 1.0))
@@ -145,13 +143,18 @@ def parse_and_notify(site, state):
             continue
         title = textnorm(title_el.get_text())
 
+        # 링크: 일반 케이스
         link_el = row.select_one(site.get("link_selector", "a"))
         href = link_el.get("href") if link_el else ""
+        # Fallback: 행 자체가 <a>인 경우 (KNUSEMI)
+        if not href and hasattr(row, "name") and row.name == "a":
+            href = row.get("href") or ""
+
         link = urljoin(site.get("base_url", site["url"]), href) if href else None
 
         date_text = extract_date(row, site)
 
-        # 중복키: 링크가 있으면 링크로, 없으면 제목|날짜
+        # 중복키: 링크가 있으면 링크, 없으면 제목|날짜
         key = link if (site.get("id_strategy", "link") == "link" and link) else f"{title}|{date_text or ''}"
         if key in seen:
             continue
