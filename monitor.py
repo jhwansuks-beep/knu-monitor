@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os, sys, json, time, re
 from pathlib import Path
 from urllib.parse import urljoin
@@ -8,13 +9,20 @@ from bs4 import BeautifulSoup
 from charset_normalizer import from_bytes
 import yaml
 
+# ----------------------------
+# Paths / Config
+# ----------------------------
 STATE_DIR = Path(".state")
 STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "seen.json"
 
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")  # 처음엔 상태만 기록
+INIT_MODE = os.getenv("INIT_MODE", "").lower() in ("1", "true", "yes")    # 처음엔 상태만 기록하고 알림 미발송
+DEBUG_PREVIEW = os.getenv("DEBUG_PREVIEW", "").lower() in ("1", "true", "yes")
 
+# ----------------------------
+# HTTP Session
+# ----------------------------
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (compatible; KNU-Notice-Bot/1.0; +https://github.com/)",
@@ -22,6 +30,9 @@ SESSION.headers.update({
 })
 TIMEOUT = 25
 
+# ----------------------------
+# Helpers
+# ----------------------------
 def load_sites():
     with open("sites.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)["sites"]
@@ -57,6 +68,9 @@ def safe_text(s: str) -> str:
     # 제어문자/제로폭 문자 제거
     return re.sub(r"[\u200b-\u200f\u202a-\u202e]", "", s or "").strip()
 
+# ----------------------------
+# Discord
+# ----------------------------
 def discord_post(title, url, site_name, date_text=None, max_retries=5):
     """Discord 웹훅 전송: 429(rate limit) 대응 재시도 & 전송 간 딜레이."""
     if not DISCORD_WEBHOOK:
@@ -87,6 +101,9 @@ def discord_post(title, url, site_name, date_text=None, max_retries=5):
         time.sleep(0.8)
     print("ERROR: Discord post failed after retries.", file=sys.stderr)
 
+# ----------------------------
+# Row filters / extractors
+# ----------------------------
 def should_skip_row(row, site):
     # 고정공지 스킵 규칙 (CSS 셀렉터/contains 지원)
     skip_rules = site.get("skip_if_selector", [])
@@ -120,6 +137,9 @@ def extract_date(row, site):
         date_text = textnorm(dlist[0].get_text())
     return date_text
 
+# ----------------------------
+# Core
+# ----------------------------
 def parse_and_notify(site, state):
     html = fetch(site["url"])
     soup = BeautifulSoup(html, "html.parser")
@@ -138,21 +158,29 @@ def parse_and_notify(site, state):
         if should_skip_row(row, site):
             continue
 
+        # 제목
         title_el = row.select_one(site.get("title_selector", "a"))
         if not title_el:
             continue
         title = textnorm(title_el.get_text())
 
-        # 링크: 일반 케이스
+        # 링크 (핵심: 개별 상세 링크 정확히 보정)
         link_el = row.select_one(site.get("link_selector", "a"))
         href = link_el.get("href") if link_el else ""
-        # Fallback: 행 자체가 <a>인 경우 (KNUSEMI)
-        if not href and hasattr(row, "name") and row.name == "a":
+
+        # 행 자체가 <a>인 경우(KNUSEMI) → 자기자신의 href 사용
+        if not href and getattr(row, "name", None) == "a":
             href = row.get("href") or ""
 
+        # 상대경로 → 절대경로
         link = urljoin(site.get("base_url", site["url"]), href) if href else None
 
+        # 날짜
         date_text = extract_date(row, site)
+
+        # PREVIEW 로그 (최대 앞 5개만)
+        if DEBUG_PREVIEW and new_count < 5:
+            print(f"[PREVIEW] {site['name']} | title='{title}' | link='{link}' | date='{date_text}'")
 
         # 중복키: 링크가 있으면 링크, 없으면 제목|날짜
         key = link if (site.get("id_strategy", "link") == "link" and link) else f"{title}|{date_text or ''}"
