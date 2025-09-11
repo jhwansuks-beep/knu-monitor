@@ -178,12 +178,12 @@ def parse_and_notify(site, state):
         # 날짜
         date_text = extract_date(row, site)
 
-        # PREVIEW 로그 (최대 앞 5개만)
+        # PREVIEW 로그
         if DEBUG_PREVIEW and new_count < 5:
             print(f"[PREVIEW] {site['name']} | title='{title}' | link='{link}' | date='{date_text}'")
 
-        # 중복키: 링크가 있으면 링크, 없으면 제목|날짜
-        key = link if (site.get("id_strategy", "link") == "link" and link) else f"{title}|{date_text or ''}"
+        # 중복키: 링크 + 날짜
+        key = f"{link}|{date_text or ''}"
         if key in seen:
             continue
 
@@ -195,9 +195,11 @@ def parse_and_notify(site, state):
         new_ids.append(key)
         new_count += 1
 
-    # 상태 업데이트
+    # 상태 업데이트 (중복 제거 + 순서 유지)
     keep = site.get("max_items", 20)
-    state[site["name"]] = (list(seen) + new_ids)[-keep:]
+    updated = list(dict.fromkeys(list(state.get(site["name"], [])) + new_ids))
+    state[site["name"]] = updated[-keep:]
+
     return new_count
 
 def main():
