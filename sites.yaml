@@ -5,10 +5,9 @@ sites:
     title_selector: "td.left a"
     link_selector: "td.left a"
     date_selector: "td:nth-of-type(4)"
-    # 기존: base_url: "https://see.knu.ac.kr"
-    base_url: "https://see.knu.ac.kr/content/board/notice.html"  # ← 경로까지 포함!
+    base_url: "https://see.knu.ac.kr/content/board/notice.html"
     id_strategy: "link"
-    max_items: 30
+    max_items: 10     # ✅ 최근 10개까지만 추적
     skip_if_selector: ["span.notice"]
 
   - name: "KNU 반도체특성화 공지(KNUSEMI)"
@@ -17,8 +16,7 @@ sites:
     title_selector: "p.subject"
     link_selector: "a"
     date_selector: "span.hit"
-    # 기존: base_url: "https://knusemi.knu.ac.kr"
-    base_url: "https://knusemi.knu.ac.kr/content/community/notice.html"  # ← 경로까지 포함!
+    base_url: "https://knusemi.knu.ac.kr/content/community/notice.html"
     id_strategy: "link"
-    max_items: 30
+    max_items: 10     # ✅ 최근 10개까지만 추적
     skip_if_selector: ["span.notice"]
